@@ -40,12 +40,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: valkey-io/valkey
+          path: ./valkey
 
       - name: Make Valkey
         run: |
           pwd \ 
           ls \
-          cd valkey \
           make distclean; make \
           src/valkey-server --daemonize yes --logfile valkey_log  --save "";
           src/valkey-benchmark --csv > results.csv
