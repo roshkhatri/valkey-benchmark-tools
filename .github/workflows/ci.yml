@@ -29,7 +29,7 @@ jobs:
               sudo yum install docker -y && \
               sudo yum install git -y && \
               sudo yum install libicu -y && \
-              sudo systemctl enable docker && \
+              sudo systemctl enable docker
   
   do-the-job:
     name: Benchmark Unstable
