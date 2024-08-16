@@ -46,7 +46,7 @@ jobs:
         run: |
           pwd \
           cd . \
-          ls -R\
+          sudo ls -R \
           
           # make distclean; make \
           # src/valkey-server --daemonize yes --logfile valkey_log  --save "";
