@@ -46,6 +46,8 @@ jobs:
         run: |
           pwd \
           ls \
+          cd valkey
+          ls \
           # make distclean; make \
           # src/valkey-server --daemonize yes --logfile valkey_log  --save "";
           # src/valkey-benchmark --csv > results.csv
