@@ -47,12 +47,10 @@ jobs:
           pwd; \
           cd valkey; \
           ls; \
-          cd valkey; \
-          ls; \
-          make distclean; make \
+          make distclean; make; \
           src/valkey-server --daemonize yes --logfile valkey_log  --save "";
-          src/valkey-benchmark --csv > results.csv
-          cat results.csv
+          src/valkey-benchmark --csv > results.csv; \
+          cat results.csv;
 
 
   stop-runner:
