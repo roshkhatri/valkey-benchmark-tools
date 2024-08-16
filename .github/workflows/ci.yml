@@ -24,7 +24,6 @@ jobs:
             ec2-instance-type: c5.xlarge
             subnet-id: ${{ secrets.AWS_EC2_SUBNET }}
             security-group-id: ${{ secrets.AWS_EC2_SECURITY_GROUP }}
-            iam-role-name: ${{ secrets.AWS_EC2_IAM_ROLE }}
             pre-runner-script: |
               sudo yum update -y && \
               sudo yum install docker -y && \
