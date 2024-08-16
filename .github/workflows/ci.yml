@@ -45,9 +45,7 @@ jobs:
       - name: Make Valkey
         run: |
           pwd \
-          cd . \
-          sudo ls -R \
-          
+          ls \
           # make distclean; make \
           # src/valkey-server --daemonize yes --logfile valkey_log  --save "";
           # src/valkey-benchmark --csv > results.csv
