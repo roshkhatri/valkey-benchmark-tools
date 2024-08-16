@@ -29,7 +29,8 @@ jobs:
               sudo yum install docker -y && \
               sudo yum install git -y && \
               sudo yum install libicu -y && \
-              sudo systemctl enable docker
+              sudo systemctl enable docker && \
+              sudo apt-get update && sudo apt-get install -y build-essential libssl-dev wget awscli
   
   do-the-job:
     name: Benchmark Unstable
