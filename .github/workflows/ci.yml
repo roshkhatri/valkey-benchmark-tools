@@ -2,39 +2,41 @@ name: do-the-job
 on: push
 jobs:
   start-runner:
-      name: Start self-hosted EC2 runner
-      runs-on: ubuntu-latest
-      outputs:
-        label: ${{ steps.start-ec2-runner.outputs.label }}
-        ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
-      steps:
-        - name: Configure AWS credentials
-          uses: aws-actions/configure-aws-credentials@v4.0.2
-          with:
-            aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
-            aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
-            aws-region: ${{ secrets.AWS_EC2_REGION }}
-        - name: Start EC2 runner
-          id: start-ec2-runner
-          uses: machulav/ec2-github-runner@v2.3.6
-          with:
-            mode: start
-            github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-            ec2-image-id: ${{ secrets.AWS_EC2_IMAGE_AMI }}
-            ec2-instance-type: c5.xlarge
-            subnet-id: ${{ secrets.AWS_EC2_SUBNET }}
-            security-group-id: ${{ secrets.AWS_EC2_SECURITY_GROUP }}
-            pre-runner-script: |
-              sudo yum update -y && \
-              sudo yum install docker -y && \
-              sudo yum install git -y && \
-              sudo yum install libicu -y && \
-              sudo systemctl enable docker
+    name: Start self-hosted EC2 runner
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4.0.2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_EC2_REGION }}
+      - name: Start EC2 runner
+        id: start-ec2-runner
+        uses: machulav/ec2-github-runner@v2.3.6
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ${{ secrets.AWS_EC2_IMAGE_AMI }}
+          ec2-instance-type: c5.xlarge
+          subnet-id: ${{ secrets.AWS_EC2_SUBNET }}
+          security-group-id: ${{ secrets.AWS_EC2_SECURITY_GROUP }}
+          pre-runner-script: |
+            sudo yum update -y && \
+            sudo yum install docker -y && \
+            sudo yum install git -y && \
+            sudo yum install libicu -y && \
+            sudo systemctl enable docker
   
   benchmark:
     name: Benchmark Unstable
-    needs: start-runner # required to start the main job when the runner is ready
-    runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
+    needs: start-runner
+    runs-on: ${{ needs.start-runner.outputs.label }}
+    outputs:
+      benchmark-filename: ${{ steps.run-benchmark.outputs.filename }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -54,19 +56,31 @@ jobs:
           pwd; \
           cd valkey; \
           ls; \
-          make distclean; make; \
-          src/valkey-server --daemonize yes --logfile valkey_log  --save "";
-          src/valkey-benchmark --csv > results.csv; \
-          cat results.csv;
+          make distclean; \
+          make;
+      
+      - name: Start Server
+        run: |
+          valkey/src/valkey-server --daemonize yes --logfile valkey_log --save "";
+      
+      - name: Run Benchmark
+        id: run-benchmark
+        run: |
+          filename="$(date +"%Y-%m-%d_%H-%M-%S").csv"
+          echo "filename=$filename" >> $GITHUB_ENV
+          valkey/src/valkey-benchmark --csv > $filename; \
+          cat $filename;
+        env:
+          filename: ${{ github.env.filename }}
   
   upload-benchmark:
     name: Upload benchmark to s3
-    needs: 
+    needs:
       - start-runner
       - benchmark
     runs-on: ${{ needs.start-runner.outputs.label }}
     steps:
-      - name: Install AWS cli.
+      - name: Install AWS cli
         run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
           unzip awscliv2.zip && \
@@ -75,35 +89,28 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-            aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
-            aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
-            aws-region: ${{ secrets.AWS_EC2_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_EC2_REGION }}
      
-      - name: print dirs
-        run: |
-          pwd && \
-          ls && \
-          cd valkey && \
-          ls
-
-      # - name: Sync to S3
-      #   run: aws s3 sync ~valkey/results.csv s3://${{ secrets.AWS_S3_BENCHMARK_UNSTABLE }}/
+      - name: Sync to S3
+        run: aws s3 cp ./valkey/${{ needs.benchmark.outputs.benchmark-filename }} s3://${{ secrets.AWS_S3_NIGHTLY_BENCHMARK_PATH }}/${{ needs.benchmark.outputs.benchmark-filename }}
 
   stop-runner:
     name: Stop self-hosted EC2 runner
     needs:
-      - start-runner # required to get output from the start-runner job
-      - benchmark # required to wait when the main job is done
+      - start-runner
+      - benchmark
       - upload-benchmark
     runs-on: ubuntu-latest
-    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    if: ${{ always() }}
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-            aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
-            aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
-            aws-region: ${{ secrets.AWS_EC2_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_EC2_REGION }}
       - name: Stop EC2 runner
         uses: machulav/ec2-github-runner@v2
         with:
