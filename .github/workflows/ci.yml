@@ -1,4 +1,4 @@
-name: do-the-job
+name: ci
 on: push
 jobs:
   start-runner:
@@ -36,7 +36,7 @@ jobs:
     needs: start-runner
     runs-on: ${{ needs.start-runner.outputs.label }}
     outputs:
-      benchmark-filename: ${{ steps.run-benchmark.outputs.filename }}
+      benchmark-filename: ${{ steps.run-benchmark.outputs.BENCHMARK_FILENAME }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -67,18 +67,18 @@ jobs:
         id: run-benchmark
         run: |
           filename="$(date +"%Y-%m-%d_%H-%M-%S").csv"
-          echo "filename=$filename" >> $GITHUB_ENV
+          echo "BENCHMARK_FILENAME=$filename" >> $GITHUB_OUTPUT
           valkey/src/valkey-benchmark --csv > $filename; \
           cat $filename;
-        env:
-          filename: ${{ github.env.filename }}
-  
+
   upload-benchmark:
     name: Upload benchmark to s3
     needs:
       - start-runner
       - benchmark
     runs-on: ${{ needs.start-runner.outputs.label }}
+    env:
+      BENCHMARK_FILENAME: ${{ needs.benchmark.outputs.benchmark-filename }}
     steps:
       - name: Install AWS cli
         run: |
@@ -87,14 +87,14 @@ jobs:
           sudo ./aws/install
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4.0.2
         with:
           aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_EC2_REGION }}
      
       - name: Sync to S3
-        run: aws s3 cp ./valkey/${{ needs.benchmark.outputs.benchmark-filename }} s3://${{ secrets.AWS_S3_NIGHTLY_BENCHMARK_PATH }}/${{ needs.benchmark.outputs.benchmark-filename }}
+        run: aws s3 cp ./${{ env.BENCHMARK_FILENAME }} s3://${{ secrets.AWS_S3_NIGHTLY_BENCHMARK_PATH }}/${{ env.BENCHMARK_FILENAME }}
 
   stop-runner:
     name: Stop self-hosted EC2 runner
@@ -106,7 +106,7 @@ jobs:
     if: ${{ always() }}
     steps:
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4.0.2
         with:
           aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
