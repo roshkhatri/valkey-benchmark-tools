@@ -1,122 +1,122 @@
-name: ci
-on:
-  schedule:
-    - cron: "0 0 * * *"
-jobs:
-  start-runner:
-    name: Start self-hosted EC2 runner
-    runs-on: ubuntu-latest
-    outputs:
-      label: ${{ steps.start-ec2-runner.outputs.label }}
-      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4.0.2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_EC2_REGION }}
-      - name: Start EC2 runner
-        id: start-ec2-runner
-        uses: machulav/ec2-github-runner@v2.3.9
-        with:
-          mode: start
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ${{ secrets.AWS_EC2_IMAGE_AMI }}
-          ec2-instance-type: c5.metal
-          subnet-id: ${{ secrets.AWS_EC2_SUBNET }}
-          security-group-id: ${{ secrets.AWS_EC2_SECURITY_GROUP }}
-          pre-runner-script: |
-            sudo yum update -y && \
-            sudo yum install docker -y && \
-            sudo yum install git -y && \
-            sudo yum install libicu -y && \
-            sudo systemctl enable docker
+# name: ci
+# on:
+#   schedule:
+#     - cron: "0 * * * *"
+# jobs:
+#   start-runner:
+#     name: Start self-hosted EC2 runner
+#     runs-on: ubuntu-latest
+#     outputs:
+#       label: ${{ steps.start-ec2-runner.outputs.label }}
+#       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+#     steps:
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v4.0.2
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_EC2_REGION }}
+#       - name: Start EC2 runner
+#         id: start-ec2-runner
+#         uses: machulav/ec2-github-runner@v2.3.9
+#         with:
+#           mode: start
+#           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+#           ec2-image-id: ${{ secrets.AWS_EC2_IMAGE_AMI }}
+#           ec2-instance-type: c5.metal
+#           subnet-id: ${{ secrets.AWS_EC2_SUBNET }}
+#           security-group-id: ${{ secrets.AWS_EC2_SECURITY_GROUP }}
+#           pre-runner-script: |
+#             sudo yum update -y && \
+#             sudo yum install docker -y && \
+#             sudo yum install git -y && \
+#             sudo yum install libicu -y && \
+#             sudo systemctl enable docker
   
-  benchmark:
-    name: Benchmark Unstable
-    needs: start-runner
-    runs-on: ${{ needs.start-runner.outputs.label }}
-    outputs:
-      benchmark-filename: ${{ steps.run-benchmark.outputs.BENCHMARK_FILENAME }}
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+#   benchmark:
+#     name: Benchmark Unstable
+#     needs: start-runner
+#     runs-on: ${{ needs.start-runner.outputs.label }}
+#     outputs:
+#       benchmark-filename: ${{ steps.run-benchmark.outputs.BENCHMARK_FILENAME }}
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v4
 
-      - name: Clone Valkey unstable
-        uses: actions/checkout@v4
-        with:
-          repository: valkey-io/valkey
-          path: ./valkey
+#       - name: Clone Valkey unstable
+#         uses: actions/checkout@v4
+#         with:
+#           repository: valkey-io/valkey
+#           path: ./valkey
 
-      - name: Install 
-        run: |
-          sudo apt-get update && sudo apt-get install -y build-essential unzip
+#       - name: Install 
+#         run: |
+#           sudo apt-get update && sudo apt-get install -y build-essential unzip
 
-      - name: Make Valkey
-        run: |
-          pwd; \
-          cd valkey; \
-          ls; \
-          make distclean; \
-          make;
+#       - name: Make Valkey
+#         run: |
+#           pwd; \
+#           cd valkey; \
+#           ls; \
+#           make distclean; \
+#           make;
       
-      - name: Start Server
-        run: |
-          valkey/src/valkey-server --daemonize yes --logfile valkey_log --save "";
+#       - name: Start Server
+#         run: |
+#           valkey/src/valkey-server --daemonize yes --logfile valkey_log --save "";
       
-      - name: Run Benchmark
-        id: run-benchmark
-        run: |
-          filename="$(date +"%Y-%m-%d_%H-%M-%S").csv"
-          echo "BENCHMARK_FILENAME=$filename" >> $GITHUB_OUTPUT
-          valkey/src/valkey-benchmark --csv > $filename; \
-          cat $filename;
+#       - name: Run Benchmark
+#         id: run-benchmark
+#         run: |
+#           filename="$(date +"%Y-%m-%d_%H-%M-%S").csv"
+#           echo "BENCHMARK_FILENAME=$filename" >> $GITHUB_OUTPUT
+#           valkey/src/valkey-benchmark --csv > $filename; \
+#           cat $filename;
 
-  upload-benchmark:
-    name: Upload benchmark to s3
-    needs:
-      - start-runner
-      - benchmark
-    runs-on: ${{ needs.start-runner.outputs.label }}
-    env:
-      BENCHMARK_FILENAME: ${{ needs.benchmark.outputs.benchmark-filename }}
-    steps:
-      - name: Install AWS cli
-        run: |
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
-          unzip awscliv2.zip && \
-          sudo ./aws/install
+#   upload-benchmark:
+#     name: Upload benchmark to s3
+#     needs:
+#       - start-runner
+#       - benchmark
+#     runs-on: ${{ needs.start-runner.outputs.label }}
+#     env:
+#       BENCHMARK_FILENAME: ${{ needs.benchmark.outputs.benchmark-filename }}
+#     steps:
+#       - name: Install AWS cli
+#         run: |
+#           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
+#           unzip awscliv2.zip && \
+#           sudo ./aws/install
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4.0.2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_EC2_REGION }}
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v4.0.2
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_EC2_REGION }}
      
-      - name: Sync to S3
-        run: aws s3 cp ./${{ env.BENCHMARK_FILENAME }} s3://${{ secrets.AWS_S3_NIGHTLY_BENCHMARK_PATH }}/${{ env.BENCHMARK_FILENAME }}
+#       - name: Sync to S3
+#         run: aws s3 cp ./${{ env.BENCHMARK_FILENAME }} s3://${{ secrets.AWS_S3_NIGHTLY_BENCHMARK_PATH }}/${{ env.BENCHMARK_FILENAME }}
 
-  stop-runner:
-    name: Stop self-hosted EC2 runner
-    needs:
-      - start-runner
-      - benchmark
-      - upload-benchmark
-    runs-on: ubuntu-latest
-    if: ${{ always() }}
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4.0.2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_EC2_REGION }}
-      - name: Stop EC2 runner
-        uses: machulav/ec2-github-runner@v2
-        with:
-          mode: stop
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          label: ${{ needs.start-runner.outputs.label }}
-          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
+#   stop-runner:
+#     name: Stop self-hosted EC2 runner
+#     needs:
+#       - start-runner
+#       - benchmark
+#       - upload-benchmark
+#     runs-on: ubuntu-latest
+#     if: ${{ always() }}
+#     steps:
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v4.0.2
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_EC2_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_EC2_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_EC2_REGION }}
+#       - name: Stop EC2 runner
+#         uses: machulav/ec2-github-runner@v2
+#         with:
+#           mode: stop
+#           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+#           label: ${{ needs.start-runner.outputs.label }}
+#           ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
